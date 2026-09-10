@@ -75,6 +75,96 @@ jobs:
           echo "Android project found at: $ANDROID_DIR"
           echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
 
+      - name: Create missing launcher icons
+        shell: bash
+        run: |
+          set -e
+
+          RES_DIR="$ANDROID_DIR/app/src/main/res"
+          export RES_DIR
+
+          echo "Creating missing launcher icons..."
+
+          mkdir -p "$RES_DIR/mipmap-mdpi"
+          mkdir -p "$RES_DIR/mipmap-hdpi"
+          mkdir -p "$RES_DIR/mipmap-xhdpi"
+          mkdir -p "$RES_DIR/mipmap-xxhdpi"
+          mkdir -p "$RES_DIR/mipmap-xxxhdpi"
+
+          python3 <<'PY'
+          import struct
+          import zlib
+          import os
+
+          res_dir = os.environ["RES_DIR"]
+
+          def create_png(path, width=192, height=192):
+              raw = bytearray()
+
+              for y in range(height):
+                  raw.append(0)
+                  for x in range(width):
+                      raw.extend((30, 90, 200, 255))
+
+              def chunk(name, data):
+                  return (
+                      struct.pack(">I", len(data))
+                      + name
+                      + data
+                      + struct.pack(
+                          ">I",
+                          zlib.crc32(name + data) & 0xffffffff
+                      )
+                  )
+
+              png_data = b'\x89PNG\r\n\x1a\n'
+
+              png_data += chunk(
+                  b'IHDR',
+                  struct.pack(
+                      ">IIBBBBB",
+                      width, height, 8, 6, 0, 0, 0
+                  )
+              )
+
+              png_data += chunk(
+                  b'IDAT',
+                  zlib.compress(bytes(raw), 9)
+              )
+
+              png_data += chunk(b'IEND', b'')
+
+              with open(path, "wb") as file:
+                  file.write(png_data)
+
+          folders = [
+              "mipmap-mdpi",
+              "mipmap-hdpi",
+              "mipmap-xhdpi",
+              "mipmap-xxhdpi",
+              "mipmap-xxxhdpi"
+          ]
+
+          for folder in folders:
+              create_png(
+                  os.path.join(
+                      res_dir,
+                      folder,
+                      "ic_launcher.png"
+                  )
+              )
+
+              create_png(
+                  os.path.join(
+                      res_dir,
+                      folder,
+                      "ic_launcher_round.png"
+                  )
+              )
+
+          print("Launcher icons created successfully.")
+          PY
+
       - name: Build APK
         shell: bash
         run: |
